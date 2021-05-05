@@ -1,6 +1,7 @@
 package data
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -22,6 +23,17 @@ type Product struct {
 	DeletedOn   string  `json:"-"`
 }
 
+type Book struct {
+	ID          uint           `db:"id" json:"id" validate:"required"`
+	Updated_at  sql.NullString `db:"updated_at" json:"-"`
+	Deleted_at  sql.NullString `db:"deleted_at" json:"-"`
+	Created_at  sql.NullString `db:"created_at" json:"-"`
+	Title       sql.NullString `db:"title" json:"title" validate:"required"`
+	Author      sql.NullString `db:"author" json:"author"`
+	Call_number sql.NullString `db:"call_number" json:"call_number" validate:"required"`
+	Person_id   sql.NullString `db:"person_id" json:"person_id" validate:"required"`
+}
+
 func (p *Product) FromJSON(r io.Reader) error {
 	e := json.NewDecoder(r)
 	return e.Decode(p)
@@ -38,15 +50,8 @@ func validateSKU(fl validator.FieldLevel) bool {
 	return re.MatchString(fl.Field().String())
 }
 
-// Products is a collection of Product
 type Products []*Product
 
-// ToJSON serializes the contents of the collection to JSON
-// NewEncoder provides better performance than json.Unmarshal as it does not
-// have to buffer the output into an in memory slice of bytes
-// this reduces allocations and the overheads of the service
-//
-// https://golang.org/pkg/encoding/json/#NewEncoder
 func (p *Products) ToJSON(w io.Writer) error {
 	e := json.NewEncoder(w)
 	return e.Encode(p)
