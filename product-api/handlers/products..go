@@ -1,6 +1,6 @@
-// Package classification of Product APi
+// Package classification of Book APi
 //
-// Documentation for Product API
+// Documentation for Book API
 //
 // Schemes: http
 // BasePath: /
@@ -25,74 +25,82 @@ import (
 	"github.com/gorilla/mux"
 )
 
-// Returns a list of products (description of response)
-// swagger:response productsResponse
-type productsResponse struct {
-	// All products in the system
+// Returns a list of books (description of response)
+// swagger:response booksResponse
+type booksResponse struct {
+	// All books in the system
 	// in:body
-	Body []data.Product
+	Body []data.Book
 }
 
-//swagger:parameters deleteProduct
-type productIDParameterWrapper struct {
-	// Id of the product that should be deleted
+//swagger:parameters deleteBook
+type bookIDParameterWrapper struct {
+	// Id of the book that should be deleted
 	//in:path
 	//required:true
 	ID int `json:id`
 }
 
 //swagger:response noContent
-type productNoContent struct {
+type bookNoContent struct {
 }
 
-// Products is a http.Handler
-type Products struct {
+// Books is a http.Handler
+type Books struct {
 	l *log.Logger
 }
 
-// NewProducts creates a products handler with the given logger
-func NewProducts(l *log.Logger) *Products {
-	return &Products{l}
+// NewBooks creates a books handler with the given logger
+func NewBooks(l *log.Logger) *Books {
+	return &Books{l}
 }
 
-//swagger:route GET /products products listProducts
-//Returns a list of products
+//swagger:route GET /books books listBooks
+//Returns a list of books
 //responses:
-//	200: productsResponse
+//	200: booksResponse
 
-// GetProducts returns the products from the data store
+// GetBooks returns the books from the data store
 
-func (p *Products) GetProducts(rw http.ResponseWriter, r *http.Request) {
-	p.l.Println("Handle GET Products")
+func (p *Books) GetBooks(w http.ResponseWriter, r *http.Request) {
+	p.l.Println("Handle GET Books")
 
-	// fetch the products from the datastore
-	lp := data.GetProducts()
+	// fetch the books from the datastore
+	books, err := data.GetBooks()
+
+	if err != nil {
+		http.Error(w, "[DB_ERROR]", http.StatusInternalServerError)
+	}
 
 	// serialize the list to JSON
-	err := lp.ToJSON(rw)
+	err = books.ToJSON(w)
 	if err != nil {
-		http.Error(rw, "Unable to marshal json", http.StatusInternalServerError)
+		http.Error(w, "Unable to marshal json", http.StatusInternalServerError)
 	}
 }
 
-//swagger:route POST /products products addProduct
-//Adds a product
+//swagger:route POST /books books addBook
+//Adds a book
 //responses:
 //	200: OK created
 //	400: BadRequest check json
-func (p *Products) AddProduct(rw http.ResponseWriter, r *http.Request) {
-	p.l.Println("Handle POST Product")
+func (p *Books) AddBook(rw http.ResponseWriter, r *http.Request) {
+	p.l.Println("Handle POST Book")
 
-	prod := r.Context().Value(&KeyProduct).(data.Product)
-	data.AddProduct(&prod)
+	prod := r.Context().Value(&KeyBook).(data.Book)
+	err := data.AddBook(&prod)
+
+	if err != nil {
+		p.l.Println(err)
+	}
 }
 
-//swagger:route PUT /products/{id} products updateProduct
-//Updates a product with given id
+//swagger:route PUT /books/{id} books updateBook
+//Updates a book with given id
 //responses:
 //	200: OK updated
 //	400: BadRequest check json
-func (p Products) UpdateProducts(rw http.ResponseWriter, r *http.Request) {
+func (p Books) UpdateBooks(rw http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	id, err := strconv.Atoi(vars["id"])
 	if err != nil {
@@ -100,33 +108,33 @@ func (p Products) UpdateProducts(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	p.l.Println("Handle PUT Product", id)
+	p.l.Println("Handle PUT Book", id)
 
-	prod := r.Context().Value(&KeyProduct).(data.Product)
+	prod := r.Context().Value(&KeyBook).(data.Book)
 
-	err = data.UpdateProduct(id, &prod)
-	if err == data.ErrProductNotFound {
-		http.Error(rw, "Product not found", http.StatusNotFound)
-		return
-	}
+	err = data.UpdateBook(id, &prod)
+	// if err == data.ErrBookNotFound {
+	// 	http.Error(rw, "Book not found", http.StatusNotFound)
+	// 	return
+	// }
 	if err != nil {
-		http.Error(rw, "Product not found", http.StatusInternalServerError)
+		http.Error(rw, "Book not found", http.StatusInternalServerError)
 		return
 	}
 }
 
-//swagger:route DELETE /products/{id} products deleteProduct
-// Deletes product with given id
+//swagger:route DELETE /books/{id} books deleteBook
+// Deletes book with given id
 //responses:
 //	200: noContent deleted
 //	400: BadRequest bad id
-func (p *Products) DeleteProduct(w http.ResponseWriter, r *http.Request) {
+func (p *Books) DeleteBook(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.Atoi(mux.Vars(r)["id"])
 	if err != nil {
 		p.l.Println("Can't parse id")
 		http.Error(w, fmt.Sprintf("Can't parse id. %s", err), http.StatusBadRequest)
 	}
-	err = data.DeleteProduct(id)
+	err = data.DeleteBook(id)
 	if err != nil {
 		p.l.Println("[ERROR] ", err)
 		http.Error(w, fmt.Sprintf("%s", err), http.StatusInternalServerError)
@@ -134,27 +142,27 @@ func (p *Products) DeleteProduct(w http.ResponseWriter, r *http.Request) {
 
 }
 
-var KeyProduct struct{}
+var KeyBook struct{}
 
-func (p Products) MiddlewareValidateProduct(next http.Handler) http.Handler {
+func (p Books) MiddlewareValidateBook(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
-		prod := data.Product{}
-
-		err := prod.FromJSON(r.Body)
+		book := data.Book{}
+		fmt.Printf("%s \n", r.Body)
+		err := book.FromJSON(r.Body)
 		if err != nil {
-			p.l.Println("[ERROR] deserializing product", err)
-			http.Error(rw, "Error reading product", http.StatusBadRequest)
+			p.l.Println("[ERROR] deserializing book", err)
+			http.Error(rw, "Error reading book", http.StatusBadRequest)
 			return
 		}
 		//validate json
-		if err := prod.Validete(); err != nil {
+		if err := book.Validate(); err != nil {
 			p.l.Println("[ERROR] bad json", err)
 			http.Error(rw, fmt.Sprintf("JSON validation failed: %s", err), http.StatusBadRequest)
 			return
 		}
 
-		// add the product to the context
-		ctx := context.WithValue(r.Context(), &KeyProduct, prod)
+		// add the book to the context
+		ctx := context.WithValue(r.Context(), &KeyBook, book)
 		r = r.WithContext(ctx)
 
 		// Call the next handler, which can be another middleware in the chain, or the final handler.

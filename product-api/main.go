@@ -49,41 +49,27 @@ func main() {
 	}
 	defer db.Close()
 
-	tx, err := db.Begin()
-	if err != nil {
-		dbLog.Println(err)
-	}
-	_, err = tx.Exec("UPDATE books SET deleted_at=$1", nil)
-	if err != nil {
-		dbLog.Println(err)
-	}
-	tx.Commit()
+	data.SetDB(db)
 
-	bookers := []data.Book{}
-	err = db.Select(&bookers, "SELECT * FROM books")
-	if err != nil {
-		dbLog.Println(err)
-	}
-	fmt.Println(bookers)
 	// create the handlers
-	ph := handlers.NewProducts(l)
+	ph := handlers.NewBooks(l)
 
 	// create a new serve mux and register the handlers
 	sm := mux.NewRouter()
 
 	getRouter := sm.Methods(http.MethodGet).Subrouter()
-	getRouter.HandleFunc("/products", ph.GetProducts)
+	getRouter.HandleFunc("/books", ph.GetBooks)
 
 	putRouter := sm.Methods(http.MethodPut).Subrouter()
-	putRouter.HandleFunc("/products/{id:[0-9]+}", ph.UpdateProducts)
-	putRouter.Use(ph.MiddlewareValidateProduct)
+	putRouter.HandleFunc("/books/{id:[0-9]+}", ph.UpdateBooks)
+	putRouter.Use(ph.MiddlewareValidateBook)
 
 	postRouter := sm.Methods(http.MethodPost).Subrouter()
-	postRouter.HandleFunc("/products", ph.AddProduct)
-	postRouter.Use(ph.MiddlewareValidateProduct)
+	postRouter.HandleFunc("/books", ph.AddBook)
+	postRouter.Use(ph.MiddlewareValidateBook)
 
 	deleteRouter := sm.Methods(http.MethodDelete).Subrouter()
-	deleteRouter.HandleFunc("/products/{id:[0-9]+}", ph.DeleteProduct)
+	deleteRouter.HandleFunc("/books/{id:[0-9]+}", ph.DeleteBook)
 
 	options := middleware.RedocOpts{SpecURL: "/swagger.yaml"}
 	docsHandler := middleware.Redoc(options, nil)

@@ -9,37 +9,44 @@ import (
 	"time"
 
 	"github.com/go-playground/validator"
+	"github.com/jmoiron/sqlx"
 )
 
-// Product defines the structure for an API product
-type Product struct {
-	ID          int     `json:"id"`
-	Name        string  `json:"name" validate:"required"`
-	Description string  `json:"description"`
-	Price       float32 `json:"price" validate:"gt=0"`
-	SKU         string  `json:"sku" validate:"sku"`
-	CreatedOn   string  `json:"-"`
-	UpdatedOn   string  `json:"-"`
-	DeletedOn   string  `json:"-"`
-}
+// Book defines the structure for an API Book
+// type Book struct {
+// 	ID          int     `json:"id"`
+// 	Name        string  `json:"name" validate:"required"`
+// 	Description string  `json:"description"`
+// 	Price       float32 `json:"price" validate:"gt=0"`
+// 	SKU         string  `json:"sku" validate:"sku"`
+// 	CreatedOn   string  `json:"-"`
+// 	UpdatedOn   string  `json:"-"`
+// 	DeletedOn   string  `json:"-"`
+// }
 
 type Book struct {
-	ID          uint           `db:"id" json:"id" validate:"required"`
-	Updated_at  sql.NullString `db:"updated_at" json:"-"`
-	Deleted_at  sql.NullString `db:"deleted_at" json:"-"`
-	Created_at  sql.NullString `db:"created_at" json:"-"`
-	Title       sql.NullString `db:"title" json:"title" validate:"required"`
-	Author      sql.NullString `db:"author" json:"author"`
-	Call_number sql.NullString `db:"call_number" json:"call_number" validate:"required"`
-	Person_id   sql.NullString `db:"person_id" json:"person_id" validate:"required"`
+	ID         int            `db:"id" json:"id"`
+	UpdatedAt  sql.NullString `db:"updated_at" json:"-"`
+	DeletedAt  sql.NullString `db:"deleted_at" json:"-"`
+	CreatedAt  sql.NullString `db:"created_at" json:"-"`
+	Title      string         `db:"title" json:"title" validate:"required"`
+	Author     string         `db:"author" json:"author" validate:"required"`
+	CallNumber string         `db:"call_number" json:"call_number"`
+	PersonId   string         `db:"person_id" json:"person_id"`
 }
 
-func (p *Product) FromJSON(r io.Reader) error {
+var db *sqlx.DB
+
+func SetDB(newDB *sqlx.DB) {
+	db = newDB
+}
+
+func (p *Book) FromJSON(r io.Reader) error {
 	e := json.NewDecoder(r)
 	return e.Decode(p)
 }
 
-func (p *Product) Validete() error {
+func (p *Book) Validate() error {
 	validate := validator.New()
 	validate.RegisterValidation("sku", validateSKU)
 	return validate.Struct(p)
@@ -50,87 +57,97 @@ func validateSKU(fl validator.FieldLevel) bool {
 	return re.MatchString(fl.Field().String())
 }
 
-type Products []*Product
+type Books []*Book
 
-func (p *Products) ToJSON(w io.Writer) error {
-	e := json.NewEncoder(w)
-	return e.Encode(p)
+func (p Books) ToJSON(w io.Writer) error {
+	encoder := json.NewEncoder(w)
+	encoder.SetIndent("", "    ")
+	return encoder.Encode(p)
 }
 
-// GetProducts returns a list of products
-func GetProducts() Products {
-	return productList
+// GetBooks returns a list of Books
+func GetBooks() (Books, error) {
+	bookers := Books{}
+	err := db.Select(&bookers, "SELECT * FROM books")
+	if err != nil {
+		return nil, err
+	}
+	return bookers, nil
 }
 
-func AddProduct(p *Product) {
-	p.ID = getNextID()
-	productList = append(productList, p)
-}
+func AddBook(p *Book) error {
 
-func UpdateProduct(id int, p *Product) error {
-	_, pos, err := findProduct(id)
+	fmt.Println("-------------------")
+	fmt.Println(p)
+
+	tx, err := db.Begin()
 	if err != nil {
 		return err
 	}
-
-	p.ID = id
-	productList[pos] = p
-
-	return nil
-}
-
-func DeleteProduct(id int) error {
-	_, index, err := findProduct(id)
-
+	_, err = tx.Exec("INSERT INTO books (created_at, title, author, call_number,person_id) VALUES ($1,$2,$3,$4,$5)", time.Now(), p.Title, p.Author, p.CallNumber, p.PersonId)
 	if err != nil {
 		return err
 	}
+	tx.Commit()
+	return err
+}
 
-	productList[index], productList[len(productList)-1] = productList[len(productList)-1], productList[index]
-	productList = productList[:len(productList)-1]
+func UpdateBook(id int, p *Book) error {
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	_, err = tx.Exec("UPDATE books SET updated_at=$1", time.Now().Local().UTC().String())
+	if err != nil {
+		return err
+	}
+	tx.Commit()
+
+	return err
+}
+
+func DeleteBook(id int) error {
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	_, err = tx.Exec("UPDATE books SET deleted_at=$1", nil)
+	if err != nil {
+		return err
+	}
+	tx.Commit()
 	return nil
 }
 
-func GetSize() int {
-	return len(productList)
-}
+// var ErrBookNotFound = fmt.Errorf("Book not found")
 
-var ErrProductNotFound = fmt.Errorf("Product not found")
+// func findBook(id int) (*Book, int, error) {
 
-func findProduct(id int) (*Product, int, error) {
-	for i, p := range productList {
-		if p.ID == id {
-			return p, i, nil
-		}
-	}
+// 	for i, p := range bookList {
+// 		if p.ID == id {
+// 			return p, i, nil
+// 		}
+// 	}
 
-	return nil, -1, ErrProductNotFound
-}
+// 	return nil, -1, ErrBookNotFound
+// }
 
-func getNextID() int {
-	lp := productList[len(productList)-1]
-	return lp.ID + 1
-}
+// func getNextID() int {
+// 	lp := bookList[len(bookList)-1]
+// 	return lp.ID + 1
+// }
 
-// productList is a hard coded list of products for this
+// bookList is a hard coded list of Books for this
 // example data source
-var productList = []*Product{
-	&Product{
-		ID:          1,
-		Name:        "Latte",
-		Description: "Frothy milky coffee",
-		Price:       2.45,
-		SKU:         "abc323",
-		CreatedOn:   time.Now().UTC().String(),
-		UpdatedOn:   time.Now().UTC().String(),
-	},
-	&Product{
-		ID:          2,
-		Name:        "Espresso",
-		Description: "Short and strong coffee without milk",
-		Price:       1.99,
-		SKU:         "fjd34",
-		CreatedOn:   time.Now().UTC().String(),
-		UpdatedOn:   time.Now().UTC().String(),
-	},
-}
+// var bookList = []*Book{
+// 	&Book{
+// 		ID:         1,
+// 		Title:      "name1",
+// 		Author:     "Frothy milky coffee",
+// 		CallNumber: "2.45",
+// 		PersonId:   "abc323",
+// 		CreatedAt:  time.Now().UTC().String(),
+// 		UpdatedAt:  time.Now().UTC().String(),
+// 		DeletedAt:  time.Now().UTC().String(),
+// 	},
+// }
