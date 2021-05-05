@@ -1,0 +1,98 @@
+basePath: /
+consumes:
+- appllication/json
+definitions:
+  Product:
+    description: Product defines the structure for an API product
+    properties:
+      description:
+        type: string
+        x-go-name: Description
+      id:
+        format: int64
+        type: integer
+        x-go-name: ID
+      name:
+        type: string
+        x-go-name: Name
+      price:
+        format: float
+        type: number
+        x-go-name: Price
+      sku:
+        type: string
+        x-go-name: SKU
+    type: object
+    x-go-package: github.com/1aidar1/goREST/data
+info:
+  description: Documentation for Product API
+  title: of Product APi
+  version: 1.0.0
+paths:
+  /products:
+    get:
+      description: Returns a list of products
+      operationId: listProducts
+      responses:
+        "200":
+          $ref: '#/responses/productsResponse'
+      tags:
+      - products
+    post:
+      description: Adds a product
+      operationId: addProduct
+      responses:
+        "200":
+          $ref: '#/responses/OK'
+          description: created
+        "400":
+          $ref: '#/responses/BadRequest'
+          description: check json
+      tags:
+      - products
+  /products/{id}:
+    delete:
+      description: Deletes product with given id
+      operationId: deleteProduct
+      parameters:
+      - description: Id of the product that should be deleted
+        format: int64
+        in: path
+        name: ID
+        required: true
+        type: integer
+      responses:
+        "200":
+          $ref: '#/responses/noContent'
+          description: deleted
+        "400":
+          $ref: '#/responses/BadRequest'
+          description: bad id
+      tags:
+      - products
+    put:
+      description: Updates a product with given id
+      operationId: updateProduct
+      responses:
+        "200":
+          $ref: '#/responses/OK'
+          description: updated
+        "400":
+          $ref: '#/responses/BadRequest'
+          description: check json
+      tags:
+      - products
+produces:
+- appllication/json
+responses:
+  noContent:
+    description: ""
+  productsResponse:
+    description: Returns a list of products (description of response)
+    schema:
+      items:
+        $ref: '#/definitions/Product'
+      type: array
+schemes:
+- http
+swagger: "2.0"
