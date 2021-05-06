@@ -12,18 +12,7 @@ import (
 	"github.com/jmoiron/sqlx"
 )
 
-// Book defines the structure for an API Book
-// type Book struct {
-// 	ID          int     `json:"id"`
-// 	Name        string  `json:"name" validate:"required"`
-// 	Description string  `json:"description"`
-// 	Price       float32 `json:"price" validate:"gt=0"`
-// 	SKU         string  `json:"sku" validate:"sku"`
-// 	CreatedOn   string  `json:"-"`
-// 	UpdatedOn   string  `json:"-"`
-// 	DeletedOn   string  `json:"-"`
-// }
-
+type Books []*Book
 type Book struct {
 	ID         int            `db:"id" json:"id"`
 	UpdatedAt  sql.NullString `db:"updated_at" json:"-"`
@@ -36,6 +25,10 @@ type Book struct {
 }
 
 var db *sqlx.DB
+
+var ErrBookNotFound = fmt.Errorf("Book not found")
+
+// *******************************
 
 func SetDB(newDB *sqlx.DB) {
 	db = newDB
@@ -57,8 +50,6 @@ func validateSKU(fl validator.FieldLevel) bool {
 	return re.MatchString(fl.Field().String())
 }
 
-type Books []*Book
-
 func (p Books) ToJSON(w io.Writer) error {
 	encoder := json.NewEncoder(w)
 	encoder.SetIndent("", "    ")
@@ -68,7 +59,7 @@ func (p Books) ToJSON(w io.Writer) error {
 // GetBooks returns a list of Books
 func GetBooks() (Books, error) {
 	bookers := Books{}
-	err := db.Select(&bookers, "SELECT * FROM books")
+	err := db.Select(&bookers, "SELECT * FROM books where deleted_at IS NULL")
 	if err != nil {
 		return nil, err
 	}
@@ -76,9 +67,6 @@ func GetBooks() (Books, error) {
 }
 
 func AddBook(p *Book) error {
-
-	fmt.Println("-------------------")
-	fmt.Println(p)
 
 	tx, err := db.Begin()
 	if err != nil {
@@ -97,7 +85,7 @@ func UpdateBook(id int, p *Book) error {
 	if err != nil {
 		return err
 	}
-	_, err = tx.Exec("UPDATE books SET updated_at=$1", time.Now().Local().UTC().String())
+	_, err = tx.Exec("UPDATE books SET updated_at=$1, title=$2,author=$3,call_number=$4,person_id=$5 WHERE id=$6", time.Now(), p.Title, p.Author, p.CallNumber, p.PersonId, id)
 	if err != nil {
 		return err
 	}
@@ -111,15 +99,21 @@ func DeleteBook(id int) error {
 	if err != nil {
 		return err
 	}
-	_, err = tx.Exec("UPDATE books SET deleted_at=$1", nil)
+	result, err := tx.Exec("UPDATE books SET deleted_at=$1 WHERE id=$2", time.Now().Local().UTC(), id)
 	if err != nil {
 		return err
 	}
 	tx.Commit()
+	s, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if s == 0 {
+		return ErrBookNotFound
+	}
+
 	return nil
 }
-
-// var ErrBookNotFound = fmt.Errorf("Book not found")
 
 // func findBook(id int) (*Book, int, error) {
 

@@ -45,6 +45,12 @@ type bookIDParameterWrapper struct {
 type bookNoContent struct {
 }
 
+//swagger:response ERROR
+type errorResponse struct {
+	//in:body
+	Err error
+}
+
 // Books is a http.Handler
 type Books struct {
 	l *log.Logger
@@ -59,23 +65,25 @@ func NewBooks(l *log.Logger) *Books {
 //Returns a list of books
 //responses:
 //	200: booksResponse
-
-// GetBooks returns the books from the data store
-
 func (p *Books) GetBooks(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-type", "application/json")
 	p.l.Println("Handle GET Books")
 
 	// fetch the books from the datastore
 	books, err := data.GetBooks()
 
 	if err != nil {
+		p.l.Println("[ERROR] ", err)
 		http.Error(w, "[DB_ERROR]", http.StatusInternalServerError)
+		return
 	}
 
 	// serialize the list to JSON
 	err = books.ToJSON(w)
 	if err != nil {
+		p.l.Println("[ERROR] ", err)
 		http.Error(w, "Unable to marshal json", http.StatusInternalServerError)
+		return
 	}
 }
 
@@ -84,7 +92,7 @@ func (p *Books) GetBooks(w http.ResponseWriter, r *http.Request) {
 //responses:
 //	200: OK created
 //	400: BadRequest check json
-func (p *Books) AddBook(rw http.ResponseWriter, r *http.Request) {
+func (p *Books) AddBook(w http.ResponseWriter, r *http.Request) {
 	p.l.Println("Handle POST Book")
 
 	prod := r.Context().Value(&KeyBook).(data.Book)
@@ -92,6 +100,8 @@ func (p *Books) AddBook(rw http.ResponseWriter, r *http.Request) {
 
 	if err != nil {
 		p.l.Println(err)
+		http.Error(w, "Unable to convert id", http.StatusBadRequest)
+		return
 	}
 }
 
@@ -99,12 +109,13 @@ func (p *Books) AddBook(rw http.ResponseWriter, r *http.Request) {
 //Updates a book with given id
 //responses:
 //	200: OK updated
-//	400: BadRequest check json
-func (p Books) UpdateBooks(rw http.ResponseWriter, r *http.Request) {
+//	400: ERROR check json
+func (p Books) UpdateBooks(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	id, err := strconv.Atoi(vars["id"])
 	if err != nil {
-		http.Error(rw, "Unable to convert id", http.StatusBadRequest)
+		p.l.Println("[ERROR] ", err)
+		http.Error(w, "Unable to convert id", http.StatusBadRequest)
 		return
 	}
 
@@ -113,12 +124,14 @@ func (p Books) UpdateBooks(rw http.ResponseWriter, r *http.Request) {
 	prod := r.Context().Value(&KeyBook).(data.Book)
 
 	err = data.UpdateBook(id, &prod)
-	// if err == data.ErrBookNotFound {
-	// 	http.Error(rw, "Book not found", http.StatusNotFound)
-	// 	return
-	// }
+	if err == data.ErrBookNotFound {
+		p.l.Println("[ERROR] ", err)
+		http.Error(w, fmt.Sprintf("%s", err), http.StatusBadRequest)
+		return
+	}
 	if err != nil {
-		http.Error(rw, "Book not found", http.StatusInternalServerError)
+		p.l.Println("[ERROR] ", err)
+		http.Error(w, fmt.Sprintf("%s", err), http.StatusInternalServerError)
 		return
 	}
 }
@@ -127,17 +140,25 @@ func (p Books) UpdateBooks(rw http.ResponseWriter, r *http.Request) {
 // Deletes book with given id
 //responses:
 //	200: noContent deleted
-//	400: BadRequest bad id
+//	400: ERROR Bad Request
+//	500: ERROR Internal Server Error
 func (p *Books) DeleteBook(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.Atoi(mux.Vars(r)["id"])
 	if err != nil {
-		p.l.Println("Can't parse id")
+		p.l.Println("Can't parse id. ", err)
 		http.Error(w, fmt.Sprintf("Can't parse id. %s", err), http.StatusBadRequest)
+		return
 	}
 	err = data.DeleteBook(id)
+	if err == data.ErrBookNotFound {
+		p.l.Println("[ERROR] ", err)
+		http.Error(w, fmt.Sprintf("%s", err), http.StatusBadRequest)
+		return
+	}
 	if err != nil {
 		p.l.Println("[ERROR] ", err)
 		http.Error(w, fmt.Sprintf("%s", err), http.StatusInternalServerError)
+		return
 	}
 
 }
@@ -145,19 +166,18 @@ func (p *Books) DeleteBook(w http.ResponseWriter, r *http.Request) {
 var KeyBook struct{}
 
 func (p Books) MiddlewareValidateBook(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		book := data.Book{}
-		fmt.Printf("%s \n", r.Body)
 		err := book.FromJSON(r.Body)
 		if err != nil {
 			p.l.Println("[ERROR] deserializing book", err)
-			http.Error(rw, "Error reading book", http.StatusBadRequest)
+			http.Error(w, "Error reading book", http.StatusBadRequest)
 			return
 		}
 		//validate json
 		if err := book.Validate(); err != nil {
 			p.l.Println("[ERROR] bad json", err)
-			http.Error(rw, fmt.Sprintf("JSON validation failed: %s", err), http.StatusBadRequest)
+			http.Error(w, fmt.Sprintf("JSON validation failed: %s", err), http.StatusBadRequest)
 			return
 		}
 
@@ -166,6 +186,6 @@ func (p Books) MiddlewareValidateBook(next http.Handler) http.Handler {
 		r = r.WithContext(ctx)
 
 		// Call the next handler, which can be another middleware in the chain, or the final handler.
-		next.ServeHTTP(rw, r)
+		next.ServeHTTP(w, r)
 	})
 }
